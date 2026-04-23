@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f2efe8">
+  <meta name="description" content="Информация о приложении TaskFlow Offline, его App Shell архитектуре и офлайн-возможностях.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TaskFlow">
+  <meta name="application-name" content="TaskFlow Offline">
+  <meta name="msapplication-TileColor" content="#1f6f5f">
+  <title>О нас | TaskFlow Offline</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="about">
+  <main class="app-shell">
+    <header class="shell-header">
+      <a class="brand" href="./index.html">
+        <img class="brand-mark" src="./icons/icon-96.png" alt="Логотип TaskFlow">
+        <span class="brand-copy">
+          <strong>TaskFlow Offline</strong>
+          <span>App Shell + Service Worker</span>
+        </span>
+      </a>
+      <nav class="shell-nav" aria-label="Основная навигация">
+        <a class="nav-link" href="./index.html">Заметки</a>
+        <a class="nav-link" href="./contacts.html">Контакты</a>
+        <a class="nav-link active" href="./about.html" aria-current="page">О нас</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">О приложении</p>
+      <h1>Архитектура App Shell</h1>
+      <p class="hero-copy">
+        TaskFlow Offline использует лёгкую оболочку приложения, которая кэшируется при первом посещении, а навигационные страницы подгружаются по стратегии Network First.
+      </p>
+      <div class="status-row">
+        <span class="network-pill" id="networkStatus">Проверяем соединение...</span>
+        <span class="task-counter" id="secureStatus">Проверяем HTTPS...</span>
+        <span class="task-counter" id="socketStatus">Socket.IO: подключение...</span>
+      </div>
+    </section>
+
+    <section class="board about-grid">
+      <article class="info-card">
+        <h2>Что входит в App Shell</h2>
+        <p>
+          Общая оболочка состоит из навигации, базовой типографики, стилей, JavaScript-логики, манифеста и иконок.
+          Эти ресурсы заранее попадают в кэш и позволяют быстро открыть интерфейс даже без сети.
+        </p>
+      </article>
+
+      <article class="info-card">
+        <h2>Как работает офлайн-режим</h2>
+        <p>
+          Список заметок хранится в localStorage, поэтому просмотр и добавление записей не зависят от соединения.
+          При отсутствии сети страницы открываются из кэша, а приложение остаётся работоспособным.
+        </p>
+      </article>
+
+      <article class="info-card">
+        <h2>Стратегия загрузки страниц</h2>
+        <p>
+          Для навигации между страницами используется стратегия Network First: браузер сначала пытается получить свежую версию страницы из сети,
+          а при ошибке или офлайн-режиме возвращает последнюю кэшированную копию.
+        </p>
+      </article>
+
+      <article class="info-card">
+        <h2>HTTPS и установка</h2>
+        <p>
+          Для полноценной работы Service Worker и установки PWA приложение нужно открывать по HTTPS
+          или через `localhost` в процессе локальной разработки.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  <noscript>Для работы приложения нужен JavaScript.</noscript>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f2efe8">
+  <meta name="description" content="Офлайн-приложение для управления заметками и задачами с App Shell архитектурой и Service Worker.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TaskFlow">
+  <meta name="application-name" content="TaskFlow Offline">
+  <meta name="msapplication-TileColor" content="#1f6f5f">
+  <title>TaskFlow Offline</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="home">
+  <main class="app-shell">
+    <header class="shell-header">
+      <a class="brand" href="./index.html">
+        <img class="brand-mark" src="./icons/icon-96.png" alt="Логотип TaskFlow">
+        <span class="brand-copy">
+          <strong>TaskFlow Offline</strong>
+          <span>App Shell + Service Worker</span>
+        </span>
+      </a>
+      <nav class="shell-nav" aria-label="Основная навигация">
+        <a class="nav-link active" href="./index.html" aria-current="page">Заметки</a>
+        <a class="nav-link" href="./contacts.html">Контакты</a>
+        <a class="nav-link" href="./about.html">О нас</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Практическая работа</p>
+      <h1>TaskFlow Offline</h1>
+      <p class="hero-copy">
+        Приложение для заметок с App Shell архитектурой, сохранением в localStorage и офлайн-работой через Service Worker.
+      </p>
+      <div class="status-row">
+        <span class="network-pill" id="networkStatus">Проверяем соединение...</span>
+        <span class="task-counter" id="taskCounter">0 заметок</span>
+        <span class="task-counter" id="secureStatus">Проверяем HTTPS...</span>
+        <span class="task-counter" id="socketStatus">Socket.IO: подключение...</span>
+      </div>
+    </section>
+
+    <section class="board">
+      <form class="task-form" id="taskForm">
+        <label class="form-label" for="taskInput">Новая заметка</label>
+        <div class="form-row">
+          <input
+            id="taskInput"
+            name="task"
+            type="text"
+            maxlength="120"
+            placeholder="Например, подготовить отчет по архитектуре App Shell"
+            autocomplete="off"
+            required
+          >
+          <button type="submit">Добавить</button>
+        </div>
+      </form>
+
+      <form class="task-form reminder-form" id="reminderForm">
+        <label class="form-label" for="reminderText">Заметка с напоминанием</label>
+        <div class="reminder-grid">
+          <input
+            id="reminderText"
+            name="reminderText"
+            type="text"
+            maxlength="120"
+            placeholder="Например, отправить отчет преподавателю"
+            autocomplete="off"
+            required
+          >
+          <input
+            id="reminderTime"
+            name="reminderTime"
+            type="datetime-local"
+            required
+          >
+          <button type="submit">Добавить с напоминанием</button>
+        </div>
+      </form>
+
+      <div class="toolbar">
+        <div class="filters" role="tablist" aria-label="Фильтр заметок">
+          <button class="filter-button active" type="button" data-filter="all">Все</button>
+          <button class="filter-button" type="button" data-filter="active">Активные</button>
+          <button class="filter-button" type="button" data-filter="done">Выполненные</button>
+        </div>
+        <button class="ghost-button" id="clearDoneButton" type="button">Удалить выполненные</button>
+      </div>
+
+      <div class="push-panel">
+        <div>
+          <p class="push-title">Push-уведомления</p>
+          <p class="push-copy">Подпишитесь, чтобы получать уведомления о новых задачах от сервера.</p>
+        </div>
+        <div class="push-actions">
+          <button class="ghost-button" id="subscribePushButton" type="button">Включить уведомления</button>
+          <button class="ghost-button" id="unsubscribePushButton" type="button">Отключить уведомления</button>
+        </div>
+      </div>
+
+      <ul class="task-list" id="taskList" aria-live="polite"></ul>
+      <div class="empty-state" id="emptyState">
+        <p>Пока заметок нет. Добавьте первую запись, и она сохранится локально даже без интернета.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  <noscript>Для работы приложения нужен JavaScript.</noscript>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

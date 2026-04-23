@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f2efe8">
+  <meta name="description" content="Страница контактов TaskFlow Offline с доступной формой обратной связи и поддержкой клавиатурной навигации.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TaskFlow">
+  <meta name="application-name" content="TaskFlow Offline">
+  <meta name="msapplication-TileColor" content="#1f6f5f">
+  <title>Контакты | TaskFlow Offline</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="contacts">
+  <main class="app-shell">
+    <header class="shell-header">
+      <a class="brand" href="./index.html">
+        <img class="brand-mark" src="./icons/icon-96.png" alt="Логотип TaskFlow">
+        <span class="brand-copy">
+          <strong>TaskFlow Offline</strong>
+          <span>App Shell + Service Worker</span>
+        </span>
+      </a>
+      <nav class="shell-nav" aria-label="Основная навигация">
+        <a class="nav-link" href="./index.html">Заметки</a>
+        <a class="nav-link active" href="./contacts.html" aria-current="page">Контакты</a>
+        <a class="nav-link" href="./about.html">О нас</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Контакты</p>
+      <h1>Связаться с командой TaskFlow</h1>
+      <p class="hero-copy">
+        Страница спроектирована по требованиям доступности: семантическая структура, полная навигация с клавиатуры, связные подписи полей и понятные статусы для скринридеров.
+      </p>
+      <div class="status-row">
+        <span class="network-pill" id="networkStatus">Проверяем соединение...</span>
+        <span class="task-counter" id="secureStatus">Проверяем HTTPS...</span>
+        <span class="task-counter" id="socketStatus">Socket.IO: подключение...</span>
+      </div>
+    </section>
+
+    <section class="board contacts-layout">
+      <section class="contact-card" aria-labelledby="contactInfoTitle">
+        <h2 id="contactInfoTitle">Контактная информация</h2>
+        <ul class="contact-list">
+          <li>
+            <span class="contact-label">Email</span>
+            <a href="mailto:support@taskflow.local">support@taskflow.local</a>
+          </li>
+          <li>
+            <span class="contact-label">Телефон</span>
+            <a href="tel:+74950000000">+7 (495) 000-00-00</a>
+          </li>
+          <li>
+            <span class="contact-label">Часы поддержки</span>
+            <span>Пн-Пт, 09:00-18:00</span>
+          </li>
+        </ul>
+        <p class="contact-note">
+          Если вы пользуетесь только клавиатурой, форма ниже полностью доступна по `Tab` и `Shift+Tab`, а подтверждение отправки можно закрыть клавишей `Escape`.
+        </p>
+      </section>
+
+      <section class="contact-card" aria-labelledby="contactFormTitle">
+        <h2 id="contactFormTitle">Форма обратной связи</h2>
+        <p class="contact-note" id="contactFormHint">
+          Поля, отмеченные символом <span aria-hidden="true">*</span>, обязательны для заполнения.
+        </p>
+
+        <div class="status-banner" id="contactLiveRegion" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <form id="contactForm" novalidate>
+          <fieldset class="contact-fieldset">
+            <legend>Ваши данные</legend>
+
+            <div class="form-stack">
+              <label class="form-label" for="contactName">Имя <span class="required-mark" aria-hidden="true">*</span></label>
+              <input
+                id="contactName"
+                name="name"
+                type="text"
+                autocomplete="name"
+                required
+                aria-required="true"
+                aria-describedby="contactNameHint contactNameError"
+              >
+              <p class="field-hint" id="contactNameHint">Укажите имя или удобное обращение.</p>
+              <p class="field-error" id="contactNameError" hidden></p>
+            </div>
+
+            <div class="form-stack">
+              <label class="form-label" for="contactEmail">Email <span class="required-mark" aria-hidden="true">*</span></label>
+              <input
+                id="contactEmail"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                required
+                aria-required="true"
+                aria-describedby="contactEmailHint contactEmailError"
+              >
+              <p class="field-hint" id="contactEmailHint">Мы отправим ответ на этот адрес.</p>
+              <p class="field-error" id="contactEmailError" hidden></p>
+            </div>
+          </fieldset>
+
+          <fieldset class="contact-fieldset">
+            <legend>Тема обращения</legend>
+
+            <div class="form-stack">
+              <label class="form-label" for="contactTopic">Категория обращения <span class="required-mark" aria-hidden="true">*</span></label>
+              <select
+                id="contactTopic"
+                name="topic"
+                required
+                aria-required="true"
+                aria-describedby="contactTopicHint contactTopicError"
+              >
+                <option value="">Выберите тему</option>
+                <option value="support">Техническая поддержка</option>
+                <option value="feedback">Обратная связь</option>
+                <option value="accessibility">Доступность и A11y</option>
+              </select>
+              <p class="field-hint" id="contactTopicHint">Выбранная категория поможет быстрее обработать запрос.</p>
+              <p class="field-error" id="contactTopicError" hidden></p>
+            </div>
+
+            <div class="form-stack">
+              <label class="form-label" for="contactMessage">Сообщение <span class="required-mark" aria-hidden="true">*</span></label>
+              <textarea
+                id="contactMessage"
+                name="message"
+                rows="6"
+                required
+                aria-required="true"
+                aria-describedby="contactMessageHint contactMessageError"
+              ></textarea>
+              <p class="field-hint" id="contactMessageHint">Опишите вопрос подробно, чтобы ответ был полезнее.</p>
+              <p class="field-error" id="contactMessageError" hidden></p>
+            </div>
+          </fieldset>
+
+          <div class="checkbox-row">
+            <input
+              id="contactConsent"
+              name="consent"
+              type="checkbox"
+              required
+              aria-required="true"
+              aria-describedby="contactConsentError"
+            >
+            <label for="contactConsent">Согласен на обработку обращения и обратную связь по указанным контактам <span class="required-mark" aria-hidden="true">*</span></label>
+          </div>
+          <p class="field-error" id="contactConsentError" hidden></p>
+
+          <div class="contact-actions">
+            <button type="submit">Отправить сообщение</button>
+            <button class="ghost-button" id="contactResetButton" type="button">Очистить форму</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <div class="modal-shell" id="contactModalShell" hidden>
+    <div class="modal-backdrop" data-action="close-contact-modal"></div>
+    <div
+      class="modal-card"
+      id="contactModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="contactModalTitle"
+      aria-describedby="contactModalDescription"
+      tabindex="-1"
+    >
+      <button class="modal-close" id="contactModalClose" type="button" aria-label="Закрыть диалоговое окно">×</button>
+      <h2 id="contactModalTitle">Сообщение отправлено</h2>
+      <p id="contactModalDescription">
+        Спасибо за обращение. Форма успешно прошла проверку доступности и отправлена локально для демонстрации практического задания.
+      </p>
+      <button id="contactModalConfirm" type="button">Понятно</button>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  <noscript>Для работы приложения нужен JavaScript.</noscript>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
