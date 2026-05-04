@@ -65,11 +65,12 @@ app.post("/snooze", (request, response) => {
   clearTimeout(reminder.timeoutId);
 
   const newDelay = 5 * 60 * 1000;
+  const newReminderTime = Date.now() + newDelay;
   const newTimeoutId = setTimeout(() => {
     notifyReminder({
       id: reminderId,
       text: reminder.text,
-      reminderTime: Date.now() + newDelay,
+      reminderTime: newReminderTime,
       title: "Напоминание отложено"
     });
     reminders.delete(reminderId);
@@ -78,10 +79,21 @@ app.post("/snooze", (request, response) => {
   reminders.set(reminderId, {
     timeoutId: newTimeoutId,
     text: reminder.text,
-    reminderTime: Date.now() + newDelay
+    reminderTime: newReminderTime
   });
 
-  return response.json({ message: "Reminder snoozed for 5 minutes" });
+  broadcast("reminderSnoozed", {
+    id: reminderId,
+    text: reminder.text,
+    reminderTime: newReminderTime
+  });
+
+  return response.json({
+    message: "Reminder snoozed for 5 minutes",
+    id: reminderId,
+    text: reminder.text,
+    reminderTime: newReminderTime
+  });
 });
 
 app.get("/health", (_request, response) => {
@@ -97,11 +109,18 @@ const socketServers = [io];
 attachSocketHandlers(io);
 
 async function notifyReminder(reminder) {
+  broadcast("reminderDue", {
+    id: reminder.id,
+    text: reminder.text,
+    reminderTime: reminder.reminderTime
+  });
+
   await sendPushNotification({
     title: reminder.title === "Напоминание отложено" ? "Напоминание отложено" : "!!! Напоминание",
     body: reminder.text,
     url: "/index.html",
-    reminderId: reminder.id
+    reminderId: reminder.id,
+    reminderTime: reminder.reminderTime
   });
 }
 
@@ -171,18 +190,20 @@ function broadcast(eventName, payload) {
 
 async function sendPushNotification(payload) {
   if (subscriptions.size === 0) {
+    console.warn("Push notification skipped: no saved subscriptions.");
     return;
   }
 
   const pending = Array.from(subscriptions.values()).map(async (subscription) => {
     try {
       await webPush.sendNotification(subscription, JSON.stringify(payload));
+      console.log("Push notification sent:", payload.title);
     } catch (error) {
       const statusCode = error?.statusCode;
       if (statusCode === 404 || statusCode === 410) {
         subscriptions.delete(subscription.endpoint);
       } else {
-        console.error("Push notification failed:", error.message || error);
+        console.error("Push notification failed:", error.body || error.message || error);
       }
     }
   });

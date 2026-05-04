@@ -32,6 +32,8 @@ let currentFilter = "all";
 let socket = null;
 let vapidPublicKey = "";
 let previousModalFocus = null;
+const reminderTimers = new Map();
+const MAX_TIMEOUT_DELAY = 2147483647;
 
 const contactValidationMessages = {
   name: "Введите имя, чтобы мы понимали, как к вам обращаться.",
@@ -45,7 +47,7 @@ updateNetworkStatus();
 updateSecureStatus();
 registerServiceWorker();
 initSocket();
-loadClientConfig();
+loadClientConfig().then(syncExistingPushSubscription);
 bindPushControls();
 initTaskPage();
 initContactsPage();
@@ -53,12 +55,18 @@ initContactsPage();
 window.addEventListener("online", updateNetworkStatus);
 window.addEventListener("offline", updateNetworkStatus);
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+}
+
 function initTaskPage() {
   if (!taskForm || !taskInput || !taskList || !emptyState || !taskCounter || !clearDoneButton) {
     return;
   }
 
+  completeExpiredReminders();
   renderTasks();
+  scheduleReminderTimers();
   setReminderMinTime();
 
   taskForm.addEventListener("submit", (event) => {
@@ -71,8 +79,7 @@ function initTaskPage() {
 
     const task = createTask(title);
     tasks.unshift(task);
-    persistTasks();
-    renderTasks();
+    saveTasks();
     taskForm.reset();
     taskInput.focus();
 
@@ -104,8 +111,7 @@ function initTaskPage() {
 
     const task = createTask(title, reminderTimestamp);
     tasks.unshift(task);
-    persistTasks();
-    renderTasks();
+    saveTasks();
     reminderForm.reset();
     setReminderMinTime();
     reminderText.focus();
@@ -127,8 +133,7 @@ function initTaskPage() {
 
     const taskId = removeButton.dataset.id;
     tasks = tasks.filter((task) => String(task.id) !== String(taskId));
-    persistTasks();
-    renderTasks();
+    saveTasks();
   });
 
   taskList.addEventListener("change", (event) => {
@@ -146,14 +151,12 @@ function initTaskPage() {
       return { ...task, done: checkbox.checked };
     });
 
-    persistTasks();
-    renderTasks();
+    saveTasks();
   });
 
   clearDoneButton.addEventListener("click", () => {
     tasks = tasks.filter((task) => !task.done);
-    persistTasks();
-    renderTasks();
+    saveTasks();
   });
 
   filterButtons.forEach((button) => {
@@ -166,6 +169,16 @@ function initTaskPage() {
 
       renderTasks();
     });
+  });
+
+  window.addEventListener("focus", () => {
+    completeExpiredReminders();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      completeExpiredReminders();
+    }
   });
 }
 
@@ -255,6 +268,108 @@ function normalizeTasks(items) {
 
 function persistTasks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+function saveTasks() {
+  persistTasks();
+
+  if (taskList && emptyState && taskCounter) {
+    renderTasks();
+  }
+
+  scheduleReminderTimers();
+}
+
+function scheduleReminderTimers() {
+  reminderTimers.forEach((timerId) => window.clearTimeout(timerId));
+  reminderTimers.clear();
+
+  tasks.forEach((task) => {
+    const reminderTimestamp = Number(task.reminder);
+    if (!reminderTimestamp || task.done) {
+      return;
+    }
+
+    const delay = reminderTimestamp - Date.now();
+    if (delay <= 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (delay > MAX_TIMEOUT_DELAY) {
+        scheduleReminderTimers();
+        return;
+      }
+
+      markReminderDone(task.id, task.title);
+    }, Math.min(delay, MAX_TIMEOUT_DELAY));
+
+    reminderTimers.set(String(task.id), timeoutId);
+  });
+}
+
+function completeExpiredReminders() {
+  const now = Date.now();
+  const expiredTasks = tasks.filter((task) => {
+    const reminderTimestamp = Number(task.reminder);
+    return reminderTimestamp && !task.done && reminderTimestamp <= now;
+  });
+
+  if (expiredTasks.length === 0) {
+    return false;
+  }
+
+  const expiredIds = new Set(expiredTasks.map((task) => String(task.id)));
+  tasks = tasks.map((task) =>
+    expiredIds.has(String(task.id))
+      ? { ...task, done: true }
+      : task
+  );
+
+  saveTasks();
+  return true;
+}
+
+function markReminderDone(reminderId, fallbackTitle = "") {
+  const task = tasks.find((item) => String(item.id) === String(reminderId));
+  if (!task || task.done) {
+    return;
+  }
+
+  tasks = tasks.map((item) =>
+    String(item.id) === String(reminderId)
+      ? { ...item, done: true }
+      : item
+  );
+
+  saveTasks();
+  showToast(`Напоминание выполнено: ${task.title || fallbackTitle}`);
+}
+
+function updateSnoozedReminder(reminderId, reminderTimestamp, fallbackTitle = "") {
+  let title = fallbackTitle;
+  let updated = false;
+
+  tasks = tasks.map((task) => {
+    if (String(task.id) !== String(reminderId)) {
+      return task;
+    }
+
+    title = task.title || title;
+    updated = true;
+    return {
+      ...task,
+      done: false,
+      reminder: reminderTimestamp
+    };
+  });
+
+  if (!updated) {
+    return;
+  }
+
+  saveTasks();
+  showToast(`Напоминание отложено: ${title}`);
 }
 
 function renderTasks() {
@@ -434,6 +549,38 @@ function initSocket() {
 
     showToast(`Напоминание запланировано: ${payload.text}`);
   });
+
+  socket.on("reminderDue", (payload) => {
+    if (!payload?.id) {
+      return;
+    }
+
+    markReminderDone(payload.id, payload.text);
+  });
+
+  socket.on("reminderSnoozed", (payload) => {
+    if (!payload?.id || !payload?.reminderTime) {
+      return;
+    }
+
+    updateSnoozedReminder(payload.id, payload.reminderTime, payload.text);
+  });
+}
+
+function handleServiceWorkerMessage(event) {
+  const message = event.data;
+  if (!message?.type) {
+    return;
+  }
+
+  if (message.type === "reminderDue") {
+    markReminderDone(message.id, message.text);
+    return;
+  }
+
+  if (message.type === "reminderSnoozed") {
+    updateSnoozedReminder(message.id, message.reminderTime, message.text);
+  }
 }
 
 async function loadClientConfig() {
@@ -482,13 +629,7 @@ async function subscribeToPush() {
       });
     }
 
-    await fetch("/subscribe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(subscription)
-    });
+    await sendSubscriptionToServer(subscription);
 
     await updatePushButtons();
     showToast("Push-уведомления включены.");
@@ -512,7 +653,7 @@ async function unsubscribeFromPush() {
       return;
     }
 
-    await fetch("/unsubscribe", {
+    const response = await fetch("/unsubscribe", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -521,6 +662,10 @@ async function unsubscribeFromPush() {
         endpoint: subscription.endpoint
       })
     });
+
+    if (!response.ok) {
+      throw new Error(`Unsubscribe failed: ${response.status}`);
+    }
 
     await subscription.unsubscribe();
     await updatePushButtons();
@@ -542,6 +687,37 @@ async function updatePushButtons() {
 
   subscribePushButton.disabled = isSubscribed;
   unsubscribePushButton.disabled = !isSubscribed;
+}
+
+async function syncExistingPushSubscription() {
+  try {
+    const registration = await getServiceWorkerRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+
+    if (!subscription) {
+      await updatePushButtons();
+      return;
+    }
+
+    await sendSubscriptionToServer(subscription);
+    await updatePushButtons();
+  } catch (error) {
+    console.error("Не удалось синхронизировать push-подписку:", error);
+  }
+}
+
+async function sendSubscriptionToServer(subscription) {
+  const response = await fetch("/subscribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(subscription)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Subscribe failed: ${response.status}`);
+  }
 }
 
 async function getServiceWorkerRegistration() {

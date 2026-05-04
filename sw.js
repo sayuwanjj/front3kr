@@ -1,4 +1,4 @@
-const CACHE_NAME = "taskflow-offline-v6";
+const CACHE_NAME = "taskflow-offline-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,6 @@ const APP_SHELL = [
   "./about.html",
   "./styles.css",
   "./app.js",
-  "/socket.io/socket.io.js",
   "./manifest.json",
   "./icons/icon-96.png",
   "./icons/icon-180.png",
@@ -15,9 +14,7 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
+  event.waitUntil(precacheAppShell());
   self.skipWaiting();
 });
 
@@ -50,28 +47,58 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
-        return networkResponse;
-      });
-    })
+    cacheFirst(event.request)
   );
 });
+
+async function precacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+
+  await Promise.all(
+    APP_SHELL.map(async (url) => {
+      const request = new Request(url, { cache: "reload" });
+      const response = await fetch(request);
+
+      if (!response.ok) {
+        throw new Error(`Failed to cache ${url}: ${response.status}`);
+      }
+
+      await cache.put(request, response);
+    })
+  );
+}
+
+async function cacheFirst(request) {
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  try {
+    const networkResponse = await fetch(request);
+
+    if (networkResponse.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, networkResponse.clone());
+    }
+
+    return networkResponse;
+  } catch (error) {
+    return new Response("", {
+      status: 504,
+      statusText: "Offline"
+    });
+  }
+}
 
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
 
   try {
     const networkResponse = await fetch(request);
-    cache.put(request, networkResponse.clone());
+    if (networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+    }
     return networkResponse;
   } catch (error) {
     const cachedResponse = await caches.match(request);
@@ -92,7 +119,11 @@ async function networkFirst(request) {
 self.addEventListener("push", (event) => {
   let data = { title: "TaskFlow Offline", body: "Появилось новое уведомление.", reminderId: null };
   if (event.data) {
-    data = event.data.json();
+    try {
+      data = event.data.json();
+    } catch (error) {
+      data.body = event.data.text();
+    }
   }
 
   const options = {
@@ -111,7 +142,20 @@ self.addEventListener("push", (event) => {
     ];
   }
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  const jobs = [self.registration.showNotification(data.title, options)];
+
+  if (data.reminderId) {
+    jobs.push(
+      notifyClients({
+        type: "reminderDue",
+        id: data.reminderId,
+        text: data.body,
+        reminderTime: data.reminderTime || Date.now()
+      })
+    );
+  }
+
+  event.waitUntil(Promise.all(jobs));
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -122,6 +166,21 @@ self.addEventListener("notificationclick", (event) => {
   if (action === "snooze" && reminderId) {
     event.waitUntil(
       fetch(`/snooze?reminderId=${reminderId}`, { method: "POST" })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Snooze failed: ${response.status}`);
+          }
+
+          return response.json();
+        })
+        .then((data) =>
+          notifyClients({
+            type: "reminderSnoozed",
+            id: data.id || reminderId,
+            text: data.text,
+            reminderTime: data.reminderTime
+          })
+        )
         .then(() => event.notification.close())
         .catch((error) => console.error("Snooze failed:", error))
     );
@@ -142,3 +201,14 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+async function notifyClients(message) {
+  const clientList = await clients.matchAll({
+    type: "window",
+    includeUncontrolled: true
+  });
+
+  clientList.forEach((client) => {
+    client.postMessage(message);
+  });
+}
